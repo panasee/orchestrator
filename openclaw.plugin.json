@@ -1,0 +1,103 @@
+{
+  "id": "orchestrator",
+  "name": "Orchestrator",
+  "description": "Prompt router for selected agents. Routes each turn into a task-specific prompt, with optional LLM-based classification.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabledAgents": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Only these agent ids use prompt routing. Empty or omitted means all agents."
+      },
+      "corePromptFiles": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Prompt files that are always injected as core rules for every turn."
+      },
+      "commonPromptFiles": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Prompt files that are always injected as common interaction rules for every turn."
+      },
+      "classifierModel": {
+        "type": "string",
+        "description": "Optional provider/model ref used only for route classification, for example openai/gpt-5-nano."
+      },
+      "defaultRoute": {
+        "type": "string",
+        "description": "Fallback route when no classifier result is available."
+      },
+      "llmTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "description": "Timeout for optional LLM route classification."
+      },
+      "maxRoutes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "Maximum number of routes to inject for one turn."
+      },
+      "routes": {
+        "type": "object",
+        "description": "Route registry. Keys are route ids. Each route can override built-in routes or define a new one.",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Set false to disable this route."
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable route description used by LLM classification."
+            },
+            "promptFile": {
+              "type": "string",
+              "description": "Absolute path or plugin-root-relative path to the route prompt file."
+            },
+            "keywords": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Rule-based matcher keywords for this route."
+            }
+          }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "enabledAgents": {
+      "label": "Enabled Agents",
+      "help": "Only these agent ids receive route-specific prompt injection."
+    },
+    "corePromptFiles": {
+      "label": "Core Prompt Files",
+      "help": "These prompt files are always injected before any route-specific prompts."
+    },
+    "commonPromptFiles": {
+      "label": "Common Prompt Files",
+      "help": "These prompt files are always injected as shared interaction rules."
+    },
+    "classifierModel": {
+      "label": "Classifier Model",
+      "help": "Optional provider/model ref used only for route classification."
+    },
+    "defaultRoute": {
+      "label": "Default Route"
+    },
+    "llmTimeoutMs": {
+      "label": "LLM Timeout Ms"
+    },
+    "maxRoutes": {
+      "label": "Max Routes"
+    },
+    "routes": {
+      "label": "Routes",
+      "help": "Define or override routes with prompt files and keywords."
+    }
+  }
+}

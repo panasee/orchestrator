@@ -1,0 +1,12 @@
+{
+  "name": "@panasee/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw prompt router plugin with optional LLM-based route classification.",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}
