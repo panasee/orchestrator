@@ -41,6 +41,21 @@ function scoreRuleRoute(inputText, routeConfig) {
   return score;
 }
 
+function isHighConfidenceRuleMatch(scored) {
+  if (!Array.isArray(scored) || scored.length === 0) {
+    return false;
+  }
+
+  const topScore = scored[0]?.score ?? 0;
+  const secondScore = scored[1]?.score ?? 0;
+
+  if (topScore >= 5) {
+    return true;
+  }
+
+  return topScore >= 3 && secondScore <= 0;
+}
+
 export function classifyRoutesByRules(inputText, routes, defaultRoute = "general", maxRoutes = 3) {
   const scored = [];
 
@@ -64,7 +79,7 @@ export function classifyRoutesByRules(inputText, routes, defaultRoute = "general
 
   return {
     routes: selectedRoutes,
-    source: "rules",
+    source: isHighConfidenceRuleMatch(scored) ? "rules_high_confidence" : "rules",
     reason:
       scored.length > 0
         ? scored.map((entry) => `${entry.route}:${entry.score}`).join(",")
@@ -593,6 +608,10 @@ export async function classifyRoutes(params) {
     params.defaultRoute,
     params.maxRoutes,
   );
+
+  if (ruleResult.source === "rules_high_confidence") {
+    return ruleResult;
+  }
 
   if (!params.classifierModel) {
     return ruleResult;
