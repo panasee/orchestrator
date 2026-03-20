@@ -11,6 +11,7 @@ import {
   normalizeRouteName,
   resolveRoutes,
 } from "./src/routes.js";
+import { runRecallPipeline } from "./src/recall/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +62,15 @@ function resolvePluginConfig(rawConfig) {
       ? "general"
       : routeNames[0];
 
+  const recallSoftBudgetTokens =
+    typeof rawConfig?.recallSoftBudgetTokens === "number" && Number.isFinite(rawConfig.recallSoftBudgetTokens)
+      ? Math.max(0, Math.trunc(rawConfig.recallSoftBudgetTokens))
+      : 400;
+  const recallHardBudgetTokens =
+    typeof rawConfig?.recallHardBudgetTokens === "number" && Number.isFinite(rawConfig.recallHardBudgetTokens)
+      ? Math.max(0, Math.trunc(rawConfig.recallHardBudgetTokens))
+      : 600;
+
   return {
     enabledAgents,
     corePromptFiles,
@@ -70,6 +80,8 @@ function resolvePluginConfig(rawConfig) {
     llmTimeoutMs,
     maxRoutes,
     routes,
+    recallSoftBudgetTokens,
+    recallHardBudgetTokens,
   };
 }
 
@@ -204,10 +216,29 @@ function buildSystemContext({ promptBlocks }) {
   return promptBlocks.join("\n\n").trim();
 }
 
+/** @type {import("./src/recall/candidates.js").RecallProvider[]} */
+const recallProviders = [];
+
 const plugin = {
   id: "orchestrator",
   name: "Orchestrator",
   description: "Prompt router for selected agents with optional LLM-based route classification.",
+
+  /**
+   * Register an external recall provider (called by vestige-bridge, memory-cognee-revised, etc.).
+   * @param {import("./src/recall/candidates.js").RecallProvider} provider
+   */
+  registerRecallProvider(provider) {
+    if (!provider || typeof provider.recall !== "function" || !provider.id) {
+      return;
+    }
+    // Prevent duplicate registration
+    if (recallProviders.some((p) => p.id === provider.id)) {
+      return;
+    }
+    recallProviders.push(provider);
+  },
+
   register(api) {
     const pluginConfig = resolvePluginConfig(api.pluginConfig ?? {});
 
@@ -284,22 +315,39 @@ const plugin = {
         )
       ).filter(Boolean);
 
-      if (promptBlocks.length === 0) {
+      // --- Memory recall composition ---
+      const recallResult = await runRecallPipeline({
+        providers: recallProviders,
+        latestUserTurn: inputText,
+        messages: event?.messages,
+        routeHint: routes[0],
+        projectHint: ctx?.workspaceDir ? path.basename(ctx.workspaceDir) : undefined,
+        softBudgetTokens: pluginConfig.recallSoftBudgetTokens,
+        hardBudgetTokens: pluginConfig.recallHardBudgetTokens,
+        logger: api.logger,
+      });
+
+      if (promptBlocks.length === 0 && !recallResult.packet) {
         return;
       }
 
       api.logger.info(
-        `[orchestrator] agent=${String(ctx?.agentId ?? "unknown")} routes=${routes.join(",") || "none"} source=${classification.source}`,
+        `[orchestrator] agent=${String(ctx?.agentId ?? "unknown")} routes=${routes.join(",") || "none"} source=${classification.source} recall=${recallResult.candidateCount}/${recallResult.dropped}dropped/${recallResult.totalTokens}tok`,
       );
 
-      return {
-        appendSystemContext: buildSystemContext({
-          promptBlocks,
-        }),
-      };
+      const result = {};
+      if (promptBlocks.length > 0) {
+        result.appendSystemContext = buildSystemContext({ promptBlocks });
+      }
+      if (recallResult.packet) {
+        result.prependContext = recallResult.packet;
+      }
+
+      return result;
     });
   },
 };
 
 export default plugin;
 export { listRouteDescriptions, listRouteNames };
+export { runRecallPipeline, composeRecallPacket, makeCandidate } from "./src/recall/index.js";
