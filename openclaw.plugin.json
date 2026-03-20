@@ -40,6 +40,23 @@
         "maximum": 5,
         "description": "Maximum number of routes to inject for one turn."
       },
+      "recallSoftBudgetTokens": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 950,
+        "description": "Combined recall soft/target token budget for memory recall packing."
+      },
+      "recallHardBudgetTokens": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 1200,
+        "description": "Combined recall hard cap token budget. Candidates beyond this are dropped."
+      },
+      "recallSystemGuidance": {
+        "type": "boolean",
+        "default": true,
+        "description": "Inject static memory interpretation rules via prependSystemContext when recall candidates exist."
+      },
       "routes": {
         "type": "object",
         "description": "Route registry. Keys are route ids. Each route can override built-in routes or define a new one.",
@@ -94,6 +111,18 @@
     },
     "maxRoutes": {
       "label": "Max Routes"
+    },
+    "recallSoftBudgetTokens": {
+      "label": "Recall Soft Budget (tokens)",
+      "help": "Target token budget for combined memory recall. Default 950."
+    },
+    "recallHardBudgetTokens": {
+      "label": "Recall Hard Budget (tokens)",
+      "help": "Hard cap token budget for combined memory recall. Default 1200."
+    },
+    "recallSystemGuidance": {
+      "label": "Recall System Guidance",
+      "help": "Inject memory interpretation rules into system context when recall is active."
     },
     "routes": {
       "label": "Routes",

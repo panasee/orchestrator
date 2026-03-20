@@ -11,7 +11,7 @@ import {
   normalizeRouteName,
   resolveRoutes,
 } from "./src/routes.js";
-import { runRecallPipeline } from "./src/recall/index.js";
+import { runRecallPipeline, RECALL_SYSTEM_GUIDANCE } from "./src/recall/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,11 +65,15 @@ function resolvePluginConfig(rawConfig) {
   const recallSoftBudgetTokens =
     typeof rawConfig?.recallSoftBudgetTokens === "number" && Number.isFinite(rawConfig.recallSoftBudgetTokens)
       ? Math.max(0, Math.trunc(rawConfig.recallSoftBudgetTokens))
-      : 400;
+      : 950;
   const recallHardBudgetTokens =
     typeof rawConfig?.recallHardBudgetTokens === "number" && Number.isFinite(rawConfig.recallHardBudgetTokens)
       ? Math.max(0, Math.trunc(rawConfig.recallHardBudgetTokens))
-      : 600;
+      : 1200;
+  const recallSystemGuidance =
+    typeof rawConfig?.recallSystemGuidance === "boolean"
+      ? rawConfig.recallSystemGuidance
+      : true;
 
   return {
     enabledAgents,
@@ -82,6 +86,7 @@ function resolvePluginConfig(rawConfig) {
     routes,
     recallSoftBudgetTokens,
     recallHardBudgetTokens,
+    recallSystemGuidance,
   };
 }
 
@@ -341,6 +346,9 @@ const plugin = {
       }
       if (recallResult.packet) {
         result.prependContext = recallResult.packet;
+        if (pluginConfig.recallSystemGuidance) {
+          result.prependSystemContext = RECALL_SYSTEM_GUIDANCE;
+        }
       }
 
       return result;
@@ -350,4 +358,4 @@ const plugin = {
 
 export default plugin;
 export { listRouteDescriptions, listRouteNames };
-export { runRecallPipeline, composeRecallPacket, makeCandidate } from "./src/recall/index.js";
+export { runRecallPipeline, composeRecallPacket, makeCandidate, RECALL_SYSTEM_GUIDANCE } from "./src/recall/index.js";

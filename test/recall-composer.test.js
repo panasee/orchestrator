@@ -12,7 +12,8 @@ import { makeCandidate } from "../src/recall/candidates.js";
 function c(overrides) {
   return makeCandidate({
     canonicalKey: "k1",
-    bucket: "recent",
+    lane: "recent",
+    bucket: "recent_other",
     score: 0.5,
     text: "test content",
     provider: "test",
@@ -26,21 +27,20 @@ describe("dedupeCandidates", () => {
     assert.equal(dedupeCandidates(candidates).length, 2);
   });
 
-  it("dedupes by canonicalKey, favoring stable over recent", () => {
+  it("dedupes by canonicalKey, favoring stable lane over recent", () => {
     const candidates = [
-      c({ canonicalKey: "x", bucket: "recent", score: 0.9, isStable: false }),
-      c({ canonicalKey: "x", bucket: "stable", score: 0.5, isStable: true }),
+      c({ canonicalKey: "x", lane: "recent", bucket: "recent_other", score: 0.9 }),
+      c({ canonicalKey: "x", lane: "stable", bucket: "other_stable", score: 0.5 }),
     ];
     const result = dedupeCandidates(candidates);
     assert.equal(result.length, 1);
-    assert.equal(result[0].bucket, "stable");
-    assert.equal(result[0].isStable, true);
+    assert.equal(result[0].lane, "stable");
   });
 
-  it("dedupes same-bucket by higher score", () => {
+  it("dedupes same-lane by higher score", () => {
     const candidates = [
-      c({ canonicalKey: "x", bucket: "recent", score: 0.3 }),
-      c({ canonicalKey: "x", bucket: "recent", score: 0.8 }),
+      c({ canonicalKey: "x", lane: "recent", score: 0.3 }),
+      c({ canonicalKey: "x", lane: "recent", score: 0.8 }),
     ];
     const result = dedupeCandidates(candidates);
     assert.equal(result.length, 1);
@@ -49,21 +49,44 @@ describe("dedupeCandidates", () => {
 });
 
 describe("sortCandidates", () => {
-  it("sorts stable before recent", () => {
-    const candidates = [c({ bucket: "recent", score: 0.9 }), c({ bucket: "stable", score: 0.3 })];
+  it("sorts by bucket priority first", () => {
+    const candidates = [
+      c({ canonicalKey: "a", bucket: "recent_other", lane: "recent", score: 0.9 }),
+      c({ canonicalKey: "b", bucket: "active_project_stable", lane: "stable", score: 0.3 }),
+    ];
     const sorted = sortCandidates(candidates);
-    assert.equal(sorted[0].bucket, "stable");
-    assert.equal(sorted[1].bucket, "recent");
+    assert.equal(sorted[0].bucket, "active_project_stable");
+    assert.equal(sorted[1].bucket, "recent_other");
   });
 
-  it("sorts by score descending within same bucket", () => {
+  it("sorts stable lane before recent lane within same bucket priority", () => {
     const candidates = [
-      c({ canonicalKey: "a", bucket: "stable", score: 0.3 }),
-      c({ canonicalKey: "b", bucket: "stable", score: 0.9 }),
+      c({ canonicalKey: "a", lane: "recent", bucket: "other_stable", score: 0.9 }),
+      c({ canonicalKey: "b", lane: "stable", bucket: "other_stable", score: 0.3 }),
+    ];
+    const sorted = sortCandidates(candidates);
+    assert.equal(sorted[0].lane, "stable");
+    assert.equal(sorted[1].lane, "recent");
+  });
+
+  it("sorts by score descending within same bucket and lane", () => {
+    const candidates = [
+      c({ canonicalKey: "a", lane: "stable", bucket: "other_stable", score: 0.3 }),
+      c({ canonicalKey: "b", lane: "stable", bucket: "other_stable", score: 0.9 }),
     ];
     const sorted = sortCandidates(candidates);
     assert.equal(sorted[0].score, 0.9);
     assert.equal(sorted[1].score, 0.3);
+  });
+
+  it("unknown buckets sort after known ones", () => {
+    const candidates = [
+      c({ canonicalKey: "a", bucket: "custom_unknown", lane: "stable", score: 0.9 }),
+      c({ canonicalKey: "b", bucket: "global_constraints", lane: "stable", score: 0.3 }),
+    ];
+    const sorted = sortCandidates(candidates);
+    assert.equal(sorted[0].bucket, "global_constraints");
+    assert.equal(sorted[1].bucket, "custom_unknown");
   });
 });
 
@@ -113,6 +136,16 @@ describe("packCandidates", () => {
     assert.equal(packed.length, 0);
     assert.equal(totalTokens, 0);
   });
+
+  it("uses spec defaults (950/1200) when no budgets provided", () => {
+    // 10 candidates of 100 tokens each = 1000, which exceeds 950 soft but fits 1200 hard
+    const candidates = Array.from({ length: 10 }, (_, i) =>
+      c({ canonicalKey: `item-${i}`, tokenEstimate: 100 }),
+    );
+    const { packed, totalTokens } = packCandidates(candidates);
+    assert.equal(packed.length, 10);
+    assert.equal(totalTokens, 1000);
+  });
 });
 
 describe("renderRecallPacket", () => {
@@ -120,24 +153,24 @@ describe("renderRecallPacket", () => {
     assert.equal(renderRecallPacket([]), "");
   });
 
-  it("wraps stable candidates in cognee_recall tags", () => {
-    const result = renderRecallPacket([c({ bucket: "stable", text: "stable fact" })]);
+  it("wraps stable lane candidates in cognee_recall tags", () => {
+    const result = renderRecallPacket([c({ lane: "stable", bucket: "other_stable", text: "stable fact" })]);
     assert.ok(result.includes("<cognee_recall>"));
     assert.ok(result.includes("stable fact"));
     assert.ok(result.includes("</cognee_recall>"));
   });
 
-  it("wraps recent candidates in vestige_recent tags", () => {
-    const result = renderRecallPacket([c({ bucket: "recent", text: "recent fact" })]);
+  it("wraps recent lane candidates in vestige_recent tags", () => {
+    const result = renderRecallPacket([c({ lane: "recent", bucket: "recent_other", text: "recent fact" })]);
     assert.ok(result.includes("<vestige_recent>"));
     assert.ok(result.includes("recent fact"));
     assert.ok(result.includes("</vestige_recent>"));
   });
 
-  it("renders both sections when mixed", () => {
+  it("renders both sections when mixed lanes", () => {
     const result = renderRecallPacket([
-      c({ bucket: "stable", text: "S1" }),
-      c({ bucket: "recent", text: "R1" }),
+      c({ lane: "stable", bucket: "other_stable", text: "S1" }),
+      c({ lane: "recent", bucket: "recent_other", text: "R1" }),
     ]);
     assert.ok(result.includes("<cognee_recall>"));
     assert.ok(result.includes("<vestige_recent>"));
@@ -156,9 +189,9 @@ describe("composeRecallPacket (full pipeline)", () => {
 
   it("dedupes, sorts, packs, and renders", () => {
     const candidates = [
-      c({ canonicalKey: "dup", bucket: "recent", score: 0.8, text: "recent version", tokenEstimate: 10 }),
-      c({ canonicalKey: "dup", bucket: "stable", score: 0.5, text: "stable version", tokenEstimate: 10, isStable: true }),
-      c({ canonicalKey: "unique", bucket: "recent", score: 0.6, text: "unique recent", tokenEstimate: 10 }),
+      c({ canonicalKey: "dup", lane: "recent", bucket: "recent_other", score: 0.8, text: "recent version", tokenEstimate: 10 }),
+      c({ canonicalKey: "dup", lane: "stable", bucket: "other_stable", score: 0.5, text: "stable version", tokenEstimate: 10 }),
+      c({ canonicalKey: "unique", lane: "recent", bucket: "recent_other", score: 0.6, text: "unique recent", tokenEstimate: 10 }),
     ];
     const result = composeRecallPacket(candidates, { softBudgetTokens: 100, hardBudgetTokens: 200 });
 
@@ -172,8 +205,8 @@ describe("composeRecallPacket (full pipeline)", () => {
 
   it("respects hard budget and drops overflow", () => {
     const candidates = [
-      c({ canonicalKey: "a", bucket: "stable", score: 0.9, text: "a".repeat(400), tokenEstimate: 100 }),
-      c({ canonicalKey: "b", bucket: "recent", score: 0.5, text: "b".repeat(2000), tokenEstimate: 500 }),
+      c({ canonicalKey: "a", lane: "stable", bucket: "active_project_stable", score: 0.9, text: "a".repeat(400), tokenEstimate: 100 }),
+      c({ canonicalKey: "b", lane: "recent", bucket: "recent_other", score: 0.5, text: "b".repeat(2000), tokenEstimate: 500 }),
     ];
     const result = composeRecallPacket(candidates, { softBudgetTokens: 100, hardBudgetTokens: 200 });
     assert.equal(result.candidateCount, 1);

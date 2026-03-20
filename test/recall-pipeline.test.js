@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { runRecallPipeline } from "../src/recall/index.js";
+import { runRecallPipeline, RECALL_SYSTEM_GUIDANCE } from "../src/recall/index.js";
 import { makeCandidate, createNoopProvider } from "../src/recall/candidates.js";
 
 describe("runRecallPipeline", () => {
@@ -25,12 +25,13 @@ describe("runRecallPipeline", () => {
   it("collects candidates from a mock provider", async () => {
     const mockProvider = {
       id: "mock-stable",
-      bucket: "stable",
+      lane: "stable",
       async recall(query) {
         return [
           makeCandidate({
             canonicalKey: "mock:1",
-            bucket: "stable",
+            lane: "stable",
+            bucket: "active_project_stable",
             score: 0.9,
             text: `Recalled for: ${query.latestUserTurn}`,
             provider: "mock-stable",
@@ -50,20 +51,20 @@ describe("runRecallPipeline", () => {
     assert.ok(result.packet.includes("<cognee_recall>"));
   });
 
-  it("collects from multiple providers and dedupes", async () => {
+  it("collects from multiple providers and dedupes by lane", async () => {
     const stableProvider = {
       id: "stable",
-      bucket: "stable",
+      lane: "stable",
       async recall() {
         return [
           makeCandidate({
             canonicalKey: "shared:1",
-            bucket: "stable",
+            lane: "stable",
+            bucket: "other_stable",
             score: 0.7,
             text: "stable version of shared fact",
             provider: "stable",
             tokenEstimate: 15,
-            isStable: true,
           }),
         ];
       },
@@ -71,12 +72,13 @@ describe("runRecallPipeline", () => {
 
     const recentProvider = {
       id: "recent",
-      bucket: "recent",
+      lane: "recent",
       async recall() {
         return [
           makeCandidate({
             canonicalKey: "shared:1",
-            bucket: "recent",
+            lane: "recent",
+            bucket: "recent_other",
             score: 0.9,
             text: "recent version of shared fact",
             provider: "recent",
@@ -84,7 +86,8 @@ describe("runRecallPipeline", () => {
           }),
           makeCandidate({
             canonicalKey: "recent-only:1",
-            bucket: "recent",
+            lane: "recent",
+            bucket: "recent_preference",
             score: 0.6,
             text: "unique recent item",
             provider: "recent",
@@ -109,7 +112,7 @@ describe("runRecallPipeline", () => {
   it("handles provider failure gracefully (fail-soft)", async () => {
     const failingProvider = {
       id: "failing",
-      bucket: "recent",
+      lane: "recent",
       async recall() {
         throw new Error("provider crashed");
       },
@@ -117,12 +120,13 @@ describe("runRecallPipeline", () => {
 
     const goodProvider = {
       id: "good",
-      bucket: "stable",
+      lane: "stable",
       async recall() {
         return [
           makeCandidate({
             canonicalKey: "good:1",
-            bucket: "stable",
+            lane: "stable",
+            bucket: "global_constraints",
             score: 0.8,
             text: "good result",
             provider: "good",
@@ -150,7 +154,7 @@ describe("runRecallPipeline", () => {
     let capturedQuery = null;
     const spyProvider = {
       id: "spy",
-      bucket: "recent",
+      lane: "recent",
       async recall(query) {
         capturedQuery = query;
         return [];
@@ -171,5 +175,14 @@ describe("runRecallPipeline", () => {
     assert.equal(capturedQuery.projectHint, "orchestrator");
     assert.ok(capturedQuery.queryText.includes("[route: code_mod]"));
     assert.ok(capturedQuery.queryText.includes("[project: orchestrator]"));
+  });
+});
+
+describe("RECALL_SYSTEM_GUIDANCE", () => {
+  it("is a non-empty string mentioning both memory blocks", () => {
+    assert.ok(typeof RECALL_SYSTEM_GUIDANCE === "string");
+    assert.ok(RECALL_SYSTEM_GUIDANCE.length > 0);
+    assert.ok(RECALL_SYSTEM_GUIDANCE.includes("<cognee_recall>"));
+    assert.ok(RECALL_SYSTEM_GUIDANCE.includes("<vestige_recent>"));
   });
 });

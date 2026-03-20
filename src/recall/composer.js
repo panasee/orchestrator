@@ -2,23 +2,20 @@
  * Memory recall composer.
  *
  * Collects RecallCandidates from zero or more providers, deduplicates by
- * canonical key (favoring stable over recent), packs under budget, and
+ * canonical key (favoring stable lane over recent), packs under budget, and
  * renders a single injection string for prependContext.
  */
 
-import { estimateTokens } from "./candidates.js";
+import { estimateTokens, bucketPriority, lanePriority } from "./candidates.js";
 
-/** Default budget constants */
-const DEFAULT_SOFT_BUDGET_TOKENS = 400;
-const DEFAULT_HARD_BUDGET_TOKENS = 600;
-
-/** Bucket priority: stable items are packed first. */
-const BUCKET_PRIORITY = /** @type {const} */ ({ stable: 0, recent: 1 });
+/** Default budget constants — aligned with spec §14.6 combined recall budget. */
+const DEFAULT_SOFT_BUDGET_TOKENS = 950;
+const DEFAULT_HARD_BUDGET_TOKENS = 1200;
 
 /**
  * Deduplicate candidates by canonicalKey.
- * When duplicates exist, favor stable over recent (tie-break).
- * Among same-bucket duplicates, favor higher score.
+ * When duplicates exist, favor stable lane over recent (tie-break).
+ * Among same-lane duplicates, favor higher score.
  *
  * @param {import("./candidates.js").RecallCandidate[]} candidates
  * @returns {import("./candidates.js").RecallCandidate[]}
@@ -35,16 +32,19 @@ export function dedupeCandidates(candidates) {
       continue;
     }
 
-    // Tie-break: prefer stable over recent
-    if (candidate.isStable && !existing.isStable) {
+    // Tie-break: prefer stable lane over recent
+    const candidateLanePri = lanePriority(candidate.lane);
+    const existingLanePri = lanePriority(existing.lane);
+
+    if (candidateLanePri < existingLanePri) {
       seen.set(key, candidate);
       continue;
     }
-    if (!candidate.isStable && existing.isStable) {
+    if (candidateLanePri > existingLanePri) {
       continue;
     }
 
-    // Same stability: prefer higher score
+    // Same lane: prefer higher score
     if (candidate.score > existing.score) {
       seen.set(key, candidate);
     }
@@ -54,15 +54,27 @@ export function dedupeCandidates(candidates) {
 }
 
 /**
- * Sort candidates by bucket priority (stable first), then by score descending.
+ * Sort candidates for packing.
+ *
+ * Priority order (spec §14.6):
+ *   1. bucket priority (lower = higher priority)
+ *   2. lane priority (stable before recent)
+ *   3. score descending
  *
  * @param {import("./candidates.js").RecallCandidate[]} candidates
  * @returns {import("./candidates.js").RecallCandidate[]}
  */
 export function sortCandidates(candidates) {
   return [...candidates].sort((a, b) => {
-    const bucketDiff = (BUCKET_PRIORITY[a.bucket] ?? 1) - (BUCKET_PRIORITY[b.bucket] ?? 1);
+    // 1. Bucket priority
+    const bucketDiff = bucketPriority(a.bucket) - bucketPriority(b.bucket);
     if (bucketDiff !== 0) return bucketDiff;
+
+    // 2. Lane priority (stable before recent)
+    const laneDiff = lanePriority(a.lane) - lanePriority(b.lane);
+    if (laneDiff !== 0) return laneDiff;
+
+    // 3. Score descending
     return b.score - a.score;
   });
 }
@@ -114,8 +126,9 @@ export function packCandidates(sortedCandidates, budgets = {}) {
 /**
  * Render packed candidates into a single prompt string.
  *
- * Stable and recent candidates are rendered in separate tagged blocks
- * so the model can distinguish provenance.
+ * Groups by lane:
+ *   - stable lane -> <cognee_recall>
+ *   - recent lane -> <vestige_recent>
  *
  * @param {import("./candidates.js").RecallCandidate[]} packed
  * @returns {string}
@@ -123,8 +136,8 @@ export function packCandidates(sortedCandidates, budgets = {}) {
 export function renderRecallPacket(packed) {
   if (packed.length === 0) return "";
 
-  const stableItems = packed.filter((c) => c.bucket === "stable");
-  const recentItems = packed.filter((c) => c.bucket === "recent");
+  const stableItems = packed.filter((c) => c.lane === "stable");
+  const recentItems = packed.filter((c) => c.lane === "recent");
 
   const sections = [];
 

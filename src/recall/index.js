@@ -8,7 +8,7 @@
  * candidates and produces an empty packet (no-op).
  */
 
-export { makeCandidate, createNoopProvider, estimateTokens } from "./candidates.js";
+export { makeCandidate, createNoopProvider, estimateTokens, bucketPriority, lanePriority, BUCKET_PRIORITY_ORDER } from "./candidates.js";
 export { buildRecallQuery, buildTailSummary } from "./query-builder.js";
 export {
   composeRecallPacket,
@@ -20,6 +20,21 @@ export {
 
 import { buildRecallQuery } from "./query-builder.js";
 import { composeRecallPacket } from "./composer.js";
+
+/**
+ * Static system guidance block injected via prependSystemContext.
+ * Concise interpretation and conflict rules for the two memory blocks.
+ */
+export const RECALL_SYSTEM_GUIDANCE = [
+  "Two memory blocks may appear in context for this turn:",
+  "- <cognee_recall>: durable stable memory from long-term knowledge graphs. Treat as authoritative baseline facts.",
+  "- <vestige_recent>: recent cognitive memory (short/mid-term preferences, life-stream, active concerns). Treat as fresher but less verified.",
+  "Interpretation rules:",
+  "- Both blocks coexist; they are not mutually exclusive.",
+  "- If they overlap on the same fact, prefer the <cognee_recall> version unless <vestige_recent> contains a more recent explicit user correction.",
+  "- If they conflict, prefer the most recently user-confirmed item.",
+  "- Use injected memory only when directly relevant to the current turn.",
+].join("\n");
 
 /**
  * Run the full recall pipeline.
