@@ -11,7 +11,12 @@ import {
   normalizeRouteName,
   resolveRoutes,
 } from "./src/routes.js";
-import { runRecallPipeline, RECALL_SYSTEM_GUIDANCE } from "./src/recall/index.js";
+import {
+  runRecallPipeline,
+  RECALL_SYSTEM_GUIDANCE,
+  listSharedRecallProviders,
+  registerSharedRecallProvider,
+} from "./src/recall/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -238,10 +243,10 @@ const plugin = {
       return;
     }
     // Prevent duplicate registration
-    if (recallProviders.some((p) => p.id === provider.id)) {
-      return;
+    if (!recallProviders.some((p) => p.id === provider.id)) {
+      recallProviders.push(provider);
     }
-    recallProviders.push(provider);
+    registerSharedRecallProvider(provider);
   },
 
   register(api) {
@@ -322,7 +327,7 @@ const plugin = {
 
       // --- Memory recall composition ---
       const recallResult = await runRecallPipeline({
-        providers: recallProviders,
+        providers: listSharedRecallProviders(recallProviders),
         latestUserTurn: inputText,
         messages: event?.messages,
         routeHint: routes[0],

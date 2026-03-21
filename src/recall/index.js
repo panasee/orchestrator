@@ -17,6 +17,11 @@ export {
   packCandidates,
   renderRecallPacket,
 } from "./composer.js";
+export {
+  registerSharedRecallProvider,
+  listSharedRecallProviders,
+  clearSharedRecallProviders,
+} from "./registry.js";
 
 import { buildRecallQuery } from "./query-builder.js";
 import { composeRecallPacket } from "./composer.js";
