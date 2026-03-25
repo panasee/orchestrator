@@ -3,12 +3,10 @@ import path from "node:path";
 const BUILTIN_ROUTES = Object.freeze({
   general: {
     description: "General fallback for mixed or ambiguous tasks.",
-    promptFile: "./src/prompts/general.md",
     keywords: [],
   },
   research: {
     description: "Research, papers, literature review, source comparison, and evidence-heavy work.",
-    promptFile: "./src/prompts/research.md",
     keywords: [
       "research",
       "paper",
@@ -32,7 +30,6 @@ const BUILTIN_ROUTES = Object.freeze({
   },
   code_mod: {
     description: "Code changes, bug fixing, implementation, debugging, and verification.",
-    promptFile: "./src/prompts/code_mod.md",
     keywords: [
       "bug",
       "fix",
@@ -64,7 +61,6 @@ const BUILTIN_ROUTES = Object.freeze({
   },
   writing: {
     description: "Writing, rewriting, polishing, structuring prose, and documentation quality.",
-    promptFile: "./src/prompts/writing.md",
     keywords: [
       "write",
       "rewrite",
@@ -92,7 +88,6 @@ const BUILTIN_ROUTES = Object.freeze({
   },
   data_collection: {
     description: "Data gathering, scraping, extraction, APIs, datasets, and collection workflows.",
-    promptFile: "./src/prompts/data_collection.md",
     keywords: [
       "collect data",
       "scrape",
@@ -151,9 +146,11 @@ function normalizeKeywords(value) {
   return result;
 }
 
-function normalizePromptFile(pluginRoot, routeName, promptFile) {
-  const fallback = `./src/prompts/${routeName}.md`;
-  const raw = typeof promptFile === "string" && promptFile.trim().length > 0 ? promptFile.trim() : fallback;
+function normalizePromptFile(pluginRoot, promptFile) {
+  if (typeof promptFile !== "string" || promptFile.trim().length === 0) {
+    return null;
+  }
+  const raw = promptFile.trim();
   return path.isAbsolute(raw) ? raw : path.resolve(pluginRoot, raw);
 }
 
@@ -164,7 +161,7 @@ export function resolveRoutes(pluginRoot, rawRoutes) {
     routes[routeName] = {
       name: routeName,
       description: routeConfig.description,
-      promptFile: normalizePromptFile(pluginRoot, routeName, routeConfig.promptFile),
+      promptFile: null,
       keywords: normalizeKeywords(routeConfig.keywords),
     };
   }
@@ -184,7 +181,7 @@ export function resolveRoutes(pluginRoot, rawRoutes) {
       const base = routes[routeName] ?? {
         name: routeName,
         description: `Custom route: ${routeName}`,
-        promptFile: normalizePromptFile(pluginRoot, routeName, undefined),
+        promptFile: null,
         keywords: [],
       };
 
@@ -195,7 +192,7 @@ export function resolveRoutes(pluginRoot, rawRoutes) {
           typeof config.description === "string" && config.description.trim().length > 0
             ? config.description.trim()
             : base.description,
-        promptFile: normalizePromptFile(pluginRoot, routeName, config.promptFile ?? base.promptFile),
+        promptFile: normalizePromptFile(pluginRoot, config.promptFile) ?? base.promptFile,
         keywords:
           Array.isArray(config.keywords)
             ? normalizeKeywords(config.keywords)
@@ -208,7 +205,7 @@ export function resolveRoutes(pluginRoot, rawRoutes) {
     routes.general = {
       name: "general",
       description: BUILTIN_ROUTES.general.description,
-      promptFile: normalizePromptFile(pluginRoot, "general", BUILTIN_ROUTES.general.promptFile),
+      promptFile: null,
       keywords: [],
     };
   }

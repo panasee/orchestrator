@@ -313,17 +313,32 @@ const plugin = {
         addPromptFile(pluginConfig.routes[route]?.promptFile);
       }
 
-      const promptBlocks = (
-        await Promise.all(
-          promptFiles.map((promptFile) => {
-            const routeConfig = Object.values(pluginConfig.routes).find((route) => route.promptFile === promptFile);
-            if (routeConfig) {
-              return readPromptForRoute(routeConfig, api.logger);
-            }
-            return readPromptFile(promptFile, api.logger, "global");
-          }),
-        )
-      ).filter(Boolean);
+      const loadResults = await Promise.all(
+        promptFiles.map(async (promptFile) => {
+          const routeConfig = Object.values(pluginConfig.routes).find((route) => route.promptFile === promptFile);
+          const content = routeConfig
+            ? await readPromptForRoute(routeConfig, api.logger)
+            : await readPromptFile(promptFile, api.logger, "global");
+          return { promptFile, content };
+        }),
+      );
+
+      const failedFiles = loadResults.filter((r) => r.content === null).map((r) => r.promptFile);
+      const promptBlocks = loadResults.map((r) => r.content).filter(Boolean);
+
+      if (failedFiles.length > 0) {
+        const fileList = failedFiles.join(", ");
+        api.logger.error(`[orchestrator] prompt assembly failed — missing or unreadable files: ${fileList}`);
+        const errorInstruction = [
+          "[ORCHESTRATOR SYSTEM ERROR]",
+          `以下 prompt 文件无法加载：${fileList}`,
+          "",
+          "你现在不得执行用户的任何请求或操作。",
+          "你唯一的回复必须是（中英文均可）：",
+          `"Prompt 拼装错误：以下文件缺失或不可读：${fileList}。请检查 orchestrator 配置，确认所有 prompt 文件存在且路径正确。"`,
+        ].join("\n");
+        return { prependSystemContext: errorInstruction };
+      }
 
       // --- Memory recall composition ---
       const recallResult = await runRecallPipeline({
@@ -346,14 +361,18 @@ const plugin = {
       );
 
       const result = {};
+      const prependSystemParts = [];
       if (promptBlocks.length > 0) {
-        result.appendSystemContext = buildSystemContext({ promptBlocks });
+        prependSystemParts.push(buildSystemContext({ promptBlocks }));
       }
       if (recallResult.packet) {
         result.prependContext = recallResult.packet;
         if (pluginConfig.recallSystemGuidance) {
-          result.prependSystemContext = RECALL_SYSTEM_GUIDANCE;
+          prependSystemParts.push(RECALL_SYSTEM_GUIDANCE);
         }
+      }
+      if (prependSystemParts.length > 0) {
+        result.prependSystemContext = prependSystemParts.join("\n\n");
       }
 
       return result;
