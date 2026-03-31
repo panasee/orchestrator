@@ -49,6 +49,7 @@ describe("orchestrator shared-provider integration", () => {
             tokenEstimate: 12,
             text: `- Shared stable rule for ${query.latestUserTurn}`,
             provider: "test-stable-provider",
+            meta: { dataset: "memory" },
           },
         ];
       },
@@ -69,7 +70,7 @@ describe("orchestrator shared-provider integration", () => {
     );
 
     assert.ok(result);
-    assert.match(result.prependContext, /<cognee_recall>/);
+    assert.match(result.prependContext, /<cognee_memory>/);
     assert.match(result.prependContext, /Shared stable rule for Need the current memory rules/);
     assert.match(result.prependSystemContext, /<vestige_recent>/);
     assert.ok(logs.some((line) => line.includes("recall=1/0dropped/12tok")));

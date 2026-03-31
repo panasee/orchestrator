@@ -153,11 +153,22 @@ describe("renderRecallPacket", () => {
     assert.equal(renderRecallPacket([]), "");
   });
 
-  it("wraps stable lane candidates in cognee_recall tags", () => {
-    const result = renderRecallPacket([c({ lane: "stable", bucket: "other_stable", text: "stable fact" })]);
-    assert.ok(result.includes("<cognee_recall>"));
+  it("wraps stable memory candidates in cognee_memory tags", () => {
+    const result = renderRecallPacket([
+      c({ lane: "stable", bucket: "other_stable", text: "stable fact", meta: { dataset: "memory" } }),
+    ]);
+    assert.ok(result.includes("<cognee_memory>"));
     assert.ok(result.includes("stable fact"));
-    assert.ok(result.includes("</cognee_recall>"));
+    assert.ok(result.includes("</cognee_memory>"));
+  });
+
+  it("wraps stable library candidates in cognee_library tags", () => {
+    const result = renderRecallPacket([
+      c({ lane: "stable", bucket: "library_reference", text: "library fact", meta: { dataset: "library" } }),
+    ]);
+    assert.ok(result.includes("<cognee_library>"));
+    assert.ok(result.includes("library fact"));
+    assert.ok(result.includes("</cognee_library>"));
   });
 
   it("wraps recent lane candidates in vestige_recent tags", () => {
@@ -167,15 +178,17 @@ describe("renderRecallPacket", () => {
     assert.ok(result.includes("</vestige_recent>"));
   });
 
-  it("renders both sections when mixed lanes", () => {
+  it("renders separate memory/library/recent sections when mixed lanes", () => {
     const result = renderRecallPacket([
-      c({ lane: "stable", bucket: "other_stable", text: "S1" }),
+      c({ lane: "stable", bucket: "other_stable", text: "M1", meta: { dataset: "memory" } }),
+      c({ lane: "stable", bucket: "library_reference", text: "L1", meta: { dataset: "library" } }),
       c({ lane: "recent", bucket: "recent_other", text: "R1" }),
     ]);
-    assert.ok(result.includes("<cognee_recall>"));
+    assert.ok(result.includes("<cognee_memory>"));
+    assert.ok(result.includes("<cognee_library>"));
     assert.ok(result.includes("<vestige_recent>"));
-    // Stable should appear before recent
-    assert.ok(result.indexOf("<cognee_recall>") < result.indexOf("<vestige_recent>"));
+    assert.ok(result.indexOf("<cognee_memory>") < result.indexOf("<cognee_library>"));
+    assert.ok(result.indexOf("<cognee_library>") < result.indexOf("<vestige_recent>"));
   });
 });
 

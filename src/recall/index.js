@@ -31,13 +31,15 @@ import { composeRecallPacket } from "./composer.js";
  * Concise interpretation and conflict rules for the two memory blocks.
  */
 export const RECALL_SYSTEM_GUIDANCE = [
-  "Two memory blocks may appear in context for this turn:",
-  "- <cognee_recall>: durable stable memory from long-term knowledge graphs. Treat as authoritative baseline facts.",
+  "Three memory blocks may appear in context for this turn:",
+  "- <cognee_memory>: runtime-derived durable memory from long-term knowledge graphs. Treat as authoritative baseline facts for user/project-specific durable knowledge.",
+  "- <cognee_library>: document-derived durable knowledge units from long-term knowledge graphs. Treat as authoritative baseline facts for curated external/source-backed knowledge.",
   "- <vestige_recent>: recent cognitive memory (short/mid-term preferences, life-stream, active concerns). Treat as fresher but less verified.",
   "Interpretation rules:",
-  "- Both blocks coexist; they are not mutually exclusive.",
-  "- If they overlap on the same fact, prefer the <cognee_recall> version unless <vestige_recent> contains a more recent explicit user correction.",
-  "- If they conflict, prefer the most recently user-confirmed item.",
+  "- These blocks can coexist; they are not mutually exclusive.",
+  "- If <cognee_memory> and <cognee_library> overlap, prefer the lane whose semantics better match the claim (project/user-specific vs external/source-derived).",
+  "- If a Cognee lane overlaps with <vestige_recent>, prefer the Cognee lane unless <vestige_recent> contains a more recent explicit user correction.",
+  "- If they conflict on a factual claim, prefer <cognee_memory> or <cognee_library> (file-backed, auditable) over <vestige_recent> unless <vestige_recent> contains an explicit override phrased as a direct correction (e.g. 'actually...', 'no, the correct value is...', 'update: ...').",
   "- Use injected memory only when directly relevant to the current turn.",
 ].join("\n");
 

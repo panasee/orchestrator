@@ -126,9 +126,13 @@ export function packCandidates(sortedCandidates, budgets = {}) {
 /**
  * Render packed candidates into a single prompt string.
  *
- * Groups by lane:
- *   - stable lane -> <cognee_recall>
+ * Groups by lane/source:
+ *   - stable memory candidates -> <cognee_memory>
+ *   - stable library candidates -> <cognee_library>
  *   - recent lane -> <vestige_recent>
+ *
+ * Stable candidates are split using candidate.meta.dataset when available.
+ * Unknown/legacy stable candidates fall back to the memory lane.
  *
  * @param {import("./candidates.js").RecallCandidate[]} packed
  * @returns {string}
@@ -136,14 +140,24 @@ export function packCandidates(sortedCandidates, budgets = {}) {
 export function renderRecallPacket(packed) {
   if (packed.length === 0) return "";
 
-  const stableItems = packed.filter((c) => c.lane === "stable");
+  const stableMemoryItems = packed.filter(
+    (c) => c.lane === "stable" && (c.meta?.dataset === "memory" || c.meta?.dataset == null),
+  );
+  const stableLibraryItems = packed.filter(
+    (c) => c.lane === "stable" && c.meta?.dataset === "library",
+  );
   const recentItems = packed.filter((c) => c.lane === "recent");
 
   const sections = [];
 
-  if (stableItems.length > 0) {
-    const body = stableItems.map((c) => c.text).join("\n");
-    sections.push(`<cognee_recall>\n${body}\n</cognee_recall>`);
+  if (stableMemoryItems.length > 0) {
+    const body = stableMemoryItems.map((c) => c.text).join("\n");
+    sections.push(`<cognee_memory>\n${body}\n</cognee_memory>`);
+  }
+
+  if (stableLibraryItems.length > 0) {
+    const body = stableLibraryItems.map((c) => c.text).join("\n");
+    sections.push(`<cognee_library>\n${body}\n</cognee_library>`);
   }
 
   if (recentItems.length > 0) {

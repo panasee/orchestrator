@@ -36,6 +36,7 @@ describe("runRecallPipeline", () => {
             text: `Recalled for: ${query.latestUserTurn}`,
             provider: "mock-stable",
             tokenEstimate: 20,
+            meta: { dataset: "memory" },
           }),
         ];
       },
@@ -48,7 +49,7 @@ describe("runRecallPipeline", () => {
 
     assert.equal(result.candidateCount, 1);
     assert.ok(result.packet.includes("Recalled for: What are my preferences?"));
-    assert.ok(result.packet.includes("<cognee_recall>"));
+    assert.ok(result.packet.includes("<cognee_memory>"));
   });
 
   it("collects from multiple providers and dedupes by lane", async () => {
@@ -179,10 +180,11 @@ describe("runRecallPipeline", () => {
 });
 
 describe("RECALL_SYSTEM_GUIDANCE", () => {
-  it("is a non-empty string mentioning both memory blocks", () => {
+  it("is a non-empty string mentioning all recall blocks", () => {
     assert.ok(typeof RECALL_SYSTEM_GUIDANCE === "string");
     assert.ok(RECALL_SYSTEM_GUIDANCE.length > 0);
-    assert.ok(RECALL_SYSTEM_GUIDANCE.includes("<cognee_recall>"));
+    assert.ok(RECALL_SYSTEM_GUIDANCE.includes("<cognee_memory>"));
+    assert.ok(RECALL_SYSTEM_GUIDANCE.includes("<cognee_library>"));
     assert.ok(RECALL_SYSTEM_GUIDANCE.includes("<vestige_recent>"));
   });
 });
