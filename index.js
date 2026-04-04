@@ -377,6 +377,25 @@ const plugin = {
 
       return result;
     });
+
+    api.registerCommand({
+      name: "orchestrator",
+      description: "Show orchestrator routing and recall status",
+      handler: (_ctx) => {
+        const routeList = Object.keys(pluginConfig.routes).join(", ") || "none";
+        const providerList = listSharedRecallProviders(recallProviders)
+          .map((p) => p.id)
+          .join(", ") || "none";
+        return {
+          text: [
+            `routes: ${routeList}`,
+            `default: ${pluginConfig.defaultRoute}`,
+            `recall providers: ${providerList}`,
+            `recall budget: ${pluginConfig.recallSoftBudgetTokens}/${pluginConfig.recallHardBudgetTokens} tok`,
+          ].join("\n"),
+        };
+      },
+    });
   },
 };
 
